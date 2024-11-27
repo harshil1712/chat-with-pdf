@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Talk to PDF</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				margin: 0;
+				padding: 0;
+				display: flex;
+				height: 100vh;
+			}
+			#left-panel {
+				width: 50%;
+				padding: 20px;
+				border-right: 1px solid #ccc;
+				display: flex;
+				flex-direction: column;
+			}
+			#right-panel {
+				width: 50%;
+				padding: 20px;
+				display: flex;
+				flex-direction: column;
+			}
+			#upload-section {
+				flex-grow: 1;
+				border: 2px dashed #ccc;
+				border-radius: 5px;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				text-align: center;
+				transition: background-color 0.3s;
+			}
+			#upload-section.dragover {
+				background-color: #e9e9e9;
+			}
+			#pdf-viewer {
+				display: none;
+				flex-grow: 1;
+				border: 1px solid #ccc;
+			}
+			#summary-section {
+				height: 50%;
+				overflow-y: auto;
+				border: 1px solid #ccc;
+				padding: 10px;
+				margin-bottom: 20px;
+			}
+			#chat-section {
+				height: 50%;
+				display: flex;
+				flex-direction: column;
+			}
+			#chat-messages {
+				flex-grow: 1;
+				border: 1px solid #ccc;
+				overflow-y: auto;
+				padding: 10px;
+				margin-bottom: 10px;
+			}
+			#chat-input {
+				display: flex;
+			}
+			#chat-input input {
+				flex-grow: 1;
+				margin-right: 10px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="left-panel">
+			<div id="upload-section">
+				<p>Drag and drop your PDF here</p>
+			</div>
+			<div id="pdf-viewer"></div>
+		</div>
+		<div id="right-panel">
+			<div id="summary-section">
+				<h2>Summary</h2>
+				<p id="summary-para">The AI-generated summary of the PDF will appear here.</p>
+			</div>
+			<div id="chat-section">
+				<h2>Chat with AI</h2>
+				<div id="chat-messages">
+					<p>Chat messages will appear here.</p>
+				</div>
+				<form id="chat-input">
+					<input type="text" id="user-input" placeholder="Ask a question about the PDF..." />
+					<button id="send-button">Send</button>
+				</form>
+			</div>
+		</div>
+
+		<script>
+			const uploadSection = document.getElementById('upload-section');
+			const pdfViewer = document.getElementById('pdf-viewer');
+			const summaryPara = document.getElementById('summary-para');
+			const chatMessages = document.getElementById('chat-messages');
+			const userInput = document.getElementById('user-input');
+			const sendButton = document.getElementById('send-button');
+
+			['dragenter', 'dragover', 'dragleave', 'drop'].forEach((eventName) => {
+				uploadSection.addEventListener(eventName, preventDefaults, false);
+			});
+
+			function preventDefaults(e) {
+				e.preventDefault();
+				e.stopPropagation();
+			}
+
+			['dragenter', 'dragover'].forEach((eventName) => {
+				uploadSection.addEventListener(eventName, highlight, false);
+			});
+
+			['dragleave', 'drop'].forEach((eventName) => {
+				uploadSection.addEventListener(eventName, unhighlight, false);
+			});
+
+			function highlight() {
+				uploadSection.classList.add('dragover');
+			}
+
+			function unhighlight() {
+				uploadSection.classList.remove('dragover');
+			}
+
+			uploadSection.addEventListener('drop', handleDrop, false);
+
+			function handleDrop(e) {
+				const dt = e.dataTransfer;
+				const files = dt.files;
+				handleFiles(files);
+			}
+
+			function handleFiles(files) {
+				if (files.length > 0) {
+					const file = files[0];
+					if (file.type === 'application/pdf') {
+						displayPDF(file);
+					} else {
+						alert('Please upload a PDF file.');
+					}
+				}
+			}
+
+			function displayPDF(file) {
+				const reader = new FileReader();
+				reader.onload = function (e) {
+					const pdfData = e.target.result;
+
+					// Hide upload section and show PDF viewer
+					uploadSection.style.display = 'none';
+					pdfViewer.style.display = 'block';
+
+					// Create an <embed> element to display the PDF
+					const embed = document.createElement('embed');
+					embed.src = pdfData;
+					embed.type = 'application/pdf';
+					embed.style.width = '100%';
+					embed.style.height = '100%';
+
+					// Clear previous content and add the new embed element
+					pdfViewer.innerHTML = '';
+					pdfViewer.appendChild(embed);
+
+					sendPDFToBackend(file);
+				};
+				reader.readAsDataURL(file);
+			}
+
+			// Function to send PDF to backend (to be implemented)
+			async function sendPDFToBackend(pdfData) {
+				const formData = new FormData();
+				formData.append('file', pdfData);
+				try {
+					const summary = await fetch('/api/file', {
+						method: 'POST',
+						body: formData,
+					});
+					const text = await summary.json();
+					summaryPara.textContent = text.summary;
+				} catch (e) {
+					console.log(e);
+				}
+			}
+
+			sendButton.addEventListener('click', async (e) => {
+				e.preventDefault();
+				const userMessage = userInput.value;
+				if (userMessage) {
+					const message = document.createElement('p');
+					message.textContent = `You: ${userMessage}`;
+					chatMessages.appendChild(message);
+					userInput.value = '';
+
+					const aiResponse = await getAiResponse(userMessage);
+
+					const aiMessage = document.createElement('p');
+					aiMessage.textContent = `AI: ${aiResponse}`;
+					chatMessages.appendChild(aiMessage);
+				}
+			});
+
+			async function getAiResponse(userMessage) {
+				// Call the backend API to get the AI response
+				const aiResponse = await fetch('/api/chat', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify({ userMessage: userMessage }),
+				});
+
+				const text = await aiResponse.json();
+				console.log(text);
+				return text.aiResponse.response;
+			}
+		</script>
+	</body>
+</html>
