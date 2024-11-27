@@ -114,4 +114,4 @@ bucket_name = "meetup-demo"
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#vectorize-indexes
 [[vectorize]]
 binding = "VECTORIZE"
-index_name = "pdf-meetup"
+index_name = "pdf-ai"

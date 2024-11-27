@@ -37,7 +37,6 @@ app.post('/api/file', async (c) => {
 
 app.post('/api/chat', async (c) => {
 	const { userMessage } = await c.req.json();
-	console.log(userMessage);
 
 	const queryVector = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
 		text: [userMessage],
@@ -55,7 +54,17 @@ app.post('/api/chat', async (c) => {
 		},
 	];
 
-	const aiResponse = await c.env.AI.run('@cf/meta/llama-3.2-3b-instruct', { messages });
+	const aiResponse = await c.env.AI.run(
+		'@cf/meta/llama-3.2-3b-instruct',
+		{ messages },
+		{
+			gateway: {
+				id: 'workshop',
+				skipCache: false,
+				cacheTtl: 3360,
+			},
+		}
+	);
 
 	return c.json({ aiResponse });
 });
@@ -80,15 +89,14 @@ const createSummary = async (text: string, AI: Ai) => {
 
 const createVector = async (text: string, env: Env) => {
 	console.log('Creating vector');
-	// Create chunk of text. Break this into smaller chunks at the paragraph level.
-	const paragraphs = text.split('\n\n');
 
-	// Process each paragraph to create vectors
-	for (const paragraph of paragraphs) {
-		if (paragraph.trim().length === 0) continue;
+	// Create chunk of text
+	const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+	for (let i = 0; i < sentences.length; i += 5) {
 		// Create vector for the paragraph
+
 		const { data } = await env.AI.run('@cf/baai/bge-base-en-v1.5', {
-			text: [paragraph],
+			text: [sentences.slice(i, i + 5).join(' ')],
 		});
 
 		const values = data[0];
@@ -103,7 +111,7 @@ const createVector = async (text: string, env: Env) => {
 				{
 					id: nanoid(),
 					metadata: {
-						text: paragraph,
+						text: sentences.slice(i, i + 5).join(' '),
 					},
 					values,
 				},
